@@ -1,28 +1,36 @@
 # 02 - Device Numbers and Files
 
-After writing this file, build the module by executing
+After writing **dev_nr.c** file, build the module by executing
 
-> make all
+```
+make all
+```
 
 and then load it into the kernel with
 
-> sudo insmod dev_nr.ko
+```
+sudo insmod dev_nr.ko
+```
 
 You can check the log traces in `/var/log/syslog` and you can see "my_dev_nr" in the list of character devices in `/proc/devices`
 
 To link a device to a file, execute
-> sudo mknod <file> c/b MAJOR MINOR
+```
+sudo mknod <file> c/b MAJOR MINOR
+```
 
 which, in this case, would be
 
-> sudo mknod /dev/mydevice c 91 0
+```
+sudo mknod /dev/mydevice c 91 0
+```
 
-
-('c' is for character device; 'b' for block device)
+(`c` is for character device; `b` for block device)
 
 The /dev/mydevice is now shown with its device numbers associations:
+
 ```
->$ ls /dev/mydevice -al
+$> ls /dev/mydevice -al
 crw-r--r-- 1 root root 91, 0 sep 24 17:59 /dev/mydevice
 ```
 
@@ -32,15 +40,21 @@ Create a file called **testDevice.c** and open the `/dev/mydevice` file as Read-
 
 Build the program using GCC:
 
-> gcc testDevice.c -o testDevice
+```
+gcc testDevice.c -o testDevice
+```
 
 Before trying to run the program, let's grant permissions to use the device file:
 
-> sudo chmod 666 /dev/mydevice
+```
+sudo chmod 666 /dev/mydevice
+```
 
 Now test the program:
 
-> ./testDevice
+```
+./testDevice
+```
 
 You should see the log trace in the terminal, as well as a log trace from the dev_nr module in the syslog.
 
