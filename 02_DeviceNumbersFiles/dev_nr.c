@@ -70,7 +70,7 @@ static int __init myInit(void)
 }
 
 /**
- * @brief function called when the module is loaded into the kernel
+ * @brief function called when the module is unloaded from the kernel
  */
 static void __exit myExit(void)
 {
