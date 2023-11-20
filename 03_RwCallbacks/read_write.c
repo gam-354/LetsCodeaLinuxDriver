@@ -13,12 +13,12 @@ static char buffer[255];
 static int buffer_pointer = 0;
 
 // Variables for device and device class
-static dev_t my_device_nr;       // Will hold the device number assigned by the kernel
-static struct class *my_class;
-static struct cdev my_device; 
+static dev_t my_device_nr;       // The device number assigned by the kernel
+static struct class *my_class;   // Pointer to the driver class 
+static struct cdev my_device;    // The device object
 
 #define DRIVER_NAME "dummydriver"
-#define DRIVER_CLASS "MyModuleClass5"
+#define DRIVER_CLASS "MyModuleClass"
 
 /**
  * @brief Read data out of the buffer
