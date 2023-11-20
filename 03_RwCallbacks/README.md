@@ -4,9 +4,16 @@ Copy directory of exercise No.2 as we are going to use it as a base. You can rem
 
 Rename `dev_nr.c` as `read_write.c`, and propagate this change in the Makefile, updating the value to be added to obj-m variable. You may also want to update all the "dev_nr" references inside the log traces
 
-### Define an internal buffer
+### Define an internal buffer and driver and class names
 
-Declare the byte buffer and an integer to control how much size of the buffer is used
+Declare the byte buffer and an integer to control how much size of the buffer is used:
+
+```
+static char buffer[255];
+static int buffer_pointer = 0;
+```
+
+Also, define the names for our driver and the driver class:
 
 ```
 #define DRIVER_NAME "dummydriver"
