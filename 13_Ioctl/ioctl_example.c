@@ -104,7 +104,7 @@ static int __init myInit(void)
    // If 0, this means that the slot was free and this is the first device registered in it.
    if(retVal == 0)
    {
-      printk("ioctl_example - registerd Device number Major: %d, Minor, %d\n", MY_MAJOR, 0);
+      printk("ioctl_example - registered Device number Major: %d, Minor, %d\n", MY_MAJOR, 0);
    }
    // If positive, there is already one device registered. Check Major and Minor returned values
    // by shifting some bits:
@@ -112,7 +112,7 @@ static int __init myInit(void)
    {
       int major = retVal >> 20;
       int minor = retVal & 0xFFFFF;
-      printk("ioctl_example - registerd Device number Major: %d, Minor, %d\n", major, minor);
+      printk("ioctl_example - registered Device number Major: %d, Minor, %d\n", major, minor);
    }
    // If negative, then something went wrong
    else

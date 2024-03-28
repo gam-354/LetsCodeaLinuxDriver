@@ -175,7 +175,7 @@ and the kernel traces in the `syslog` file as well:
 
 ```
 [  820.314747] ioctl_example - Hello mundo!
-[  820.314749] ioctl_example - registerd Device number Major: 91, Minor, 0
+[  820.314749] ioctl_example - registered Device number Major: 91, Minor, 0
 [ 1086.974333] ioctl_example - open was called!
 [ 1086.974337] ioctl_example - the answer was copied
 [ 1086.974360] ioctl_example - update the answer to 123
