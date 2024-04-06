@@ -32,11 +32,7 @@ static unsigned int my_poll(struct file * file, poll_table * wait)
    return 0;
 }
 
-
-
-
-
-// IOCTL function for registering the UserSpace app to the kernel module 
+// IOCTL function for unocking the UserSpace app from the wait induced by polling
 static long int my_ioctl(struct file * file, unsigned cmd, unsigned long arg) 
 {
    if (cmd == CMD_UNLOCK)
@@ -57,8 +53,6 @@ static int my_close(struct inode * device_file, struct file * instance)
    return 0;
 }
 
-
-
 static struct file_operations fops = {
    .owner = THIS_MODULE,
    .unlocked_ioctl = my_ioctl,    // name of ioctl function
@@ -71,12 +65,8 @@ static int __init myInit(void)
    // Init waitqueue
    init_waitqueue_head(&waitqueue);
    
-   
-   
    // Register the device number for a new character device
    int retVal = register_chrdev(MY_MAJOR, "LKM_poll", &fops);
-
-   // retval contains some info encoded.
 
    // If 0, this means that the slot was free and this is the first device registered in it.
    if(retVal == 0)

@@ -1,35 +1,57 @@
-# 15 - Kernel signals to user space
+# 16 - Poll Callback
 
-This is a variation of the Chapter 15 in the official Let's Code a Linux Driver project. There, the signal is sent whenever an interruption is triggered by a physical button in the Raspberry device. That requires (obviously) having the corresponding HW. In this version of the exercise, however, the kernel module will send signals by itself using a thread, instead of listening for an interruption.
+This exercise explores the "poll" functionality that a kernel module has. This allows a program running in user space to get blocked for an event that is received in the kernel space.
+
+This is a variation of the official Exercise 16. Here, two user-space executables will be created: one for getting blocked through the poll call, and another to unlock the former using an IOCTL call.
 
 ## Preparation
 
-This exercise is a merge of **14 - Kernel Threads** and **13 - Ioctl**. Any of the source files of them is valid as a code base. At the end of the exercise, we need to have the following:
+Take exercise "13 - IOCTL" as base. Rename kernel module to `pollCallback` and propagate the change.
 
-* **signals.c** -> The file with the source code of the kernel module
-* **ioctl_commands.h** -> Header with the signal number and the ioctl command ID
-* **test.c** -> A simple C application to listen for kernel space signals
+Create a header file called defs.h. It will contain two constants to be shared across the executables. One is the IOCTL Unlocking command ID, and the other one is the device file name.
+
+```
+#define CMD_UNLOCK _IO('R', 'g')
+#define DEVICE_FILE_NAME "/dev/poll"
+```
 
 ## Main code
 
-This kernel module has to implement the following functionalities:
+Ensure the module includes the following headers:
 
-* 1 thread creation/destruction
-* Thread function
-* A function to send the signal to user space
-* An IOCTL dispatching function to register the client from user space
-* Character device registration and de-registration
-* Device release function to free resources after client is de-registered
+```
+#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/cdev.h>
+#include <linux/fs.h>
+#include <linux/ioctl.h>
+#include <linux/poll.h>
+#include <linux/wait.h>
+
+#include "defs.h"
+```
+
+Declare a couple of variables to manage the wait. One is just a flag (simulating the arrival of an IRQ or any other external event) and the other one is a wait_queue_head_t structure, which is the shared object to be used for the wait.
+
+```
+static int irq_ready = 0;
+static wait_queue_head_t waitqueue;
+```
 
 #### Module initialization
 
-Add the code to register the device, as done in many previous exercises:
+First, initialize the `waitqueue` structure.
+
+```
+init_waitqueue_head(&waitqueue);
+```
+
+Then, add the code to register the device, as done in many previous exercises:
 
 ```
 // Register the device number for a new character device
-int retVal = register_chrdev(MY_MAJOR, "LKM_signals", &fops);
+int retVal = register_chrdev(MY_MAJOR, "LKM_poll", &fops);
 
-// retval contains some info encoded.
 // If 0, this means that the slot was free and this is the first device registeredin it.
 if(retVal == 0)
 {
@@ -53,252 +75,124 @@ else
 }
 ```
 
-Also add the code to create and launch the thread:
-
-```
-kthread_1 = kthread_create(thread_function, &sleep_time, "kthread_1");
-if(kthread_1 != NULL)
-{
-   // Start the thread:
-   wake_up_process(kthread_1);
-   printk("signals - Thread was created and it is running now!\n");
-}
-else
-{
-   printk("signals - Thread could not be created!\n");
-   return -1;
-}
-```
-
 Finally, make sure that the myInit function returns 0.
 
-#### Module exit
-
-Here the module has to stop the thread and unregister the char device.
-
-```
-if(kthread_1 != NULL)
-{
-   kthread_stop(kthread_1);
-}
-unregister_chrdev(MY_MAJOR, "LKM_signals");
-```
-
-#### IOCTL management
-
-Ensure the following headers are included:
-
-```
-#include <linux/ioctl.h>
-#include "ioctl_commands.h"
-```
-
-Open `ioctl_commands.h` and define the two shared constants between the kernel module and the test application:
-
-```
-// The kernel will generate a unique magic number for the command
-#define REGISTER_UAPP _IO('R', 'g')
-
-// Signal sending parameters
-#define SIGNR 44
-```
-
-Back in the source code, declare a global variable to hold the details of the registered client:
-
-```
-static struct task_struct * task = NULL;
-
-```
-Define the ioctl function. This time, it only dispatches the `REGISTER_UAPP` command:
-
-```
-static long int my_ioctl(struct file * file, unsigned cmd, unsigned long arg) 
-{
-   if (cmd == REGISTER_UAPP)
-   {
-      task = get_current();
-      printk("signals - Userspace app with PID %d is registered\n", task->pid);
-   }
-   return 0;
-}
-```
-
-The `get_current()` call returns the information of the caller, which is the test application from user space. This information comes in a task_struct object that will be stored globally so that the thread also has access to it. The assignation of this data to `task` variable can be considered the internal signal to the thread to let it know that it is now ready to send the signal to the client.
-
-#### Client de-registration
-
-As explained before, the device file closure callbck (`my_close` in this exercise) will be used to manage the de-registration of the user space client. This means that the information in `task` is now obsolete and must be cleaned out.
-
-```
-static int my_close(struct inode * device_file, struct file * instance) 
-{
-   printk("signals - close was called!\n");
-   if (task != NULL)
-   {
-      task = NULL;
-   }
-   return 0;
-}
-```
-
-
-#### Threads
-
-Ensure the following headers are included:
-
-```
-#include <linux/kthread.h>  // For managing threads
-#include <linux/sched.h>
-#include <linux/delay.h>    // To call msdelay function
-```
-
-Define the global variables for the thread: one `task_struct` object and an integer to store the sleeping time of the thread before sending the signal:
-
-```
-static struct task_struct * kthread_1;
-static int sleep_time = 5;
-```
-
-The reason for this sleep is to add some delay between the registration of the client and the signal sending, somehow emulating the time that the operator would have spent until pressing the physical button.
-
-The thread will loop indefinitely until it is killed by the kernel module exit function. Within those loops, only when the `task` variable holds data, the thread will call `send_signal()` to actually send the signal.
-
-```
-int thread_function(void * data)
-{
-   int sleep_time_secs = *(int *)data;
-
-   // Do something with the counter and print it
-   printk("signals - Thread function! Sending signal in %d seconds...\n", sleep_time_secs);
-
-   // Working loop:
-   while(!kthread_should_stop())
-   {
-      // Delay time depending on thread number
-      msleep(sleep_time_secs * 1000);
-
-      // Send the signal
-      if (task != NULL)
-      {
-         send_signal(task);
-      }
-   }
-
-   printk("signals - Thread finished execution!\n");
-   return 0;
-}
-```
-
-#### Sending the signal
-
-Finally, the send_signal function will create a `siginfo` struct object to set a couple of parameters, and will call send_sig_info kernel function, passing both the `siginfo` and `task` data as arguments:
-
-```
-void send_signal(struct task_struct * task)
-{
-   struct siginfo info;
-   memset(&info, 0, sizeof(info));
-
-   info.si_signo = SIGNR;
-   info.si_code = SI_QUEUE;
-
-   if(send_sig_info(SIGNR, (struct kernel_siginfo *)&info, task) < 0)
-   {
-      printk("signals - error sending signal\n");
-   }
-}
-```
-
-#### File operations
-
-Remember to update the `fops` struct object accordingly:
+Also remember to add the `.poll` capability in the `file_operations` structure.
 
 ```
 static struct file_operations fops = {
    .owner = THIS_MODULE,
-   .release = my_close,
-   .unlocked_ioctl = my_ioctl    // name of ioctl function
+   .unlocked_ioctl = my_ioctl,    // name of ioctl function
+   .poll = my_poll,
+   .release = my_close
 };
 ```
 
+#### Module exit
 
-## Test application
-
-test.c file should include the following headers:
-
-```
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/ioctl.h>      // To allow issuing ioctl commands
-#include <signal.h>
-
-#include "ioctl_commands.h"
-```
-
-This application needs to:
-
-1. Register a signal handler function
-2. Open the device file and send the `REGISTER_UAPP` command via an ioctl call
-3. Wait to receive the signal from the kernel space
-
-Let's declare a simple global variable to flag the reception of the signal:
+Here the module just has to unregister the char device.
 
 ```
-int signal_received = 0;
+unregister_chrdev(MY_MAJOR, "LKM_poll");
 ```
-The signal handling function will raise this flag when called.
+
+#### Poll callback
+
+The poll callback function takes a `file` pointer and a `poll_table` pointer. Both of them will be passed-through directly to `poll_wait()` kernel function, along with our `waitqueue` object.
 
 ```
-void signalHandler(int sig)
+// Poll callback:
+static unsigned int my_poll(struct file * file, poll_table * wait)
 {
-    printf("Signal received!\n");
-    signal_received = 1;
+   poll_wait(file, &waitqueue, wait);
+   if (irq_ready == 1)
+   {
+      irq_ready = 0;
+      return POLLIN;
+   }
+   return 0;
 }
 ```
 
-The main() function needs to do the three actions described above:
+#### IOCTL management
+
+Define the ioctl function. This time, it only dispatches the `CMD_UNLOCK` command. When this request arrives, the irq_ready flag is raised and the wake_up() function is called to unlock the waiting threads.
+
+```
+static long int my_ioctl(struct file * file, unsigned cmd, unsigned long arg) 
+{
+   if (cmd == CMD_UNLOCK)
+   {
+      printk("poll - Waking up polling processes\n");
+      irq_ready = 1;
+      wake_up(&waitqueue);
+   }
+   return 0;
+}
+```
+
+
+## Test applications
+
+### Poll application
+
+This program will open the device file and call poll() linux function (ensure you have `poll.h` header included). This call will reach `my_poll()` function in the kernel module and will be blocked until the kernel module returns from `poll_wait()`.
 
 ```
 int main()
 {
-    int fd;
-
-    // Register the signal handler function
-    signal(SIGNR, signalHandler);
-
-    printf("PID: %d\n", getpid());
+    struct pollfd my_poll;
 
     // Open the device file
-    fd = open("/dev/signals", O_WRONLY);
+    int fd = open(DEVICE_FILE_NAME, O_RDONLY);
     if (fd == -1)
     {
-        printf("Opening was not possible\n");
+        perror("Opening was not possible\n");
         return -1;
     }
 
-    // Register app to KM
-    if(ioctl(fd, REGISTER_UAPP, NULL) > 0)
-    {
-        perror("Error registering app");
-        close(fd);
-        return -1;
-    }
+    memset(&my_poll, 0, sizeof(my_poll));
+    my_poll.fd = fd;
+    my_poll.events = POLLIN;
 
-    printf("Waiting for signal... \n");
-    while(!signal_received)
-    {
-        sleep(1);
-    }
+    printf("Polling... \n");
+    poll(&my_poll,1,-1);
+    printf("Unlocked! \n");
 
     close(fd);
     return 0;
 }
 ```
 
-Note that the PID of the process is printed in both the test application and the kernel module. This way we can match the info of the client in both sides.
+### Unlock application
 
+This program will also open the device file and send an `ioctl()` call with the `CMD_UNLOCK` argument. This command will make the kernel wake up the waiting queue. Ensure `defs.h` , `ioctl.h` and `fcntl.h` headers are loaded.
+
+```
+int main()
+{
+    // Open the device file
+    int fd = open(DEVICE_FILE_NAME, O_WRONLY);
+    if (fd == -1)
+    {
+        printf("Opening was not possible\n");
+        return -1;
+    }
+
+    // Send the unlocking command to the KM
+    if(ioctl(fd, CMD_UNLOCK, NULL) > 0)
+    {
+        perror("Error unlocking");
+        close(fd);
+        return -1;
+    }
+
+    printf("Unlock command sent\n");
+
+    close(fd);
+    return 0;
+}
+```
 
 ## Test the results
 
@@ -309,27 +203,11 @@ Now create the device file from the terminal with the `mknod` command, passing t
 ```
 sudo mknod /dev/signals c 91 0
 ```
+
 Remember to give 666 permissions to `/dev/signals` file.
 
-Build the test application with gcc:
+Build the test applications with gcc.
 
-```
-gcc test.c -o test
-```
+First, run `test_poll` application. This process will lock the terminal waiting for the signal.
 
-Run the application. In that moment, kernel traces will show that the client has registered:
-
-```
-[ 1487.576633] signals - Userspace app with PID 5245 is registered
-```
-
-Within a period between 0 and `sleep_time` + 1, you should see the application print the message acknowleding the signal:
-
-```
-Signal received!
-```
-
-You may stop and relaunch the test app as many times as you want. The kernel will manage the subcriptions and it will send the signal the new processes. Note that with this implementation, the kernel module can only handle one client at the same time.
-
-
-
+Then, open a different terminal and run `test_unlock` application. This app will end immediately. Back in the first terminal, `test_poll` should have ended with the corresponding printed message.
