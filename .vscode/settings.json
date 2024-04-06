@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "module.h": "c",
+        "fs.h": "c",
+        "mount.h": "c",
+        "types.h": "c"
+    }
+}
